@@ -38,7 +38,7 @@ app = FaceAnalysis(name="antelopev2")
 app.prepare(ctx_id=-1)  # CPU (-1) or GPU (0)
 
 # Directory containing dataset images
-dataset_dir = "/Users/sebasdeldi/Development/SD/recognition-api/people_dataset"
+dataset_dir = "/Users/sebasdeldi/Development/SD/human_recognition/test_runner_1"
 
 def store_embedding(image_name, embedding):
     normalized_embedding = embedding / np.linalg.norm(embedding)  # Normalize
