@@ -10,14 +10,14 @@ from insightface.app import FaceAnalysis
 
 # CREATE EXTENSION IF NOT EXISTS vector;
 
-# CREATE TABLE embeddings (
+# CREATE TABLE faces (
 #     id SERIAL PRIMARY KEY,
-#     name TEXT NOT NULL,
+#     photo_key TEXT NOT NULL,
 #     embedding VECTOR(512) NOT NULL
 # );
 
-# CREATE INDEX embeddings_embedding_idx
-# ON embeddings
+# CREATE INDEX faces_embedding_idx
+# ON faces
 # USING hnsw (embedding vector_l2_ops)
 # WITH (m = 16, ef_construction = 200);
 
