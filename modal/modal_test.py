@@ -1,15 +1,19 @@
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+
 import modal
 
-app = modal.App("example-get-started")
+image = modal.Image.debian_slim().pip_install("fastapi[standard]", "boto3")
+app = modal.App(image=image, name="example-get-started")
 
+
+class Item(BaseModel):
+    name: str
+    qty: int = 42
 
 @app.function()
-def square(x):
-    print("This code is running on a remote worker!")
-    return x**2
-
-
-@app.local_entrypoint()
-def main():
-    print("the square is", square.remote(42))
-
+@modal.fastapi_endpoint(method="POST")
+def f(item: Item):
+    import boto3
+    # do things with boto3...
+    return HTMLResponse(f"<html>Hello, {item.name}!</html>")
