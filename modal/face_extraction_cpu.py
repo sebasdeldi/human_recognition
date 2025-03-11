@@ -17,7 +17,7 @@ VOLUME_MOUNT_PATH = "/root/.insightface/models"
 DATABASE_URL = os.getenv("DATABASE_URL")
 MAX_DOWNLOAD_WORKERS = 5      # For concurrent image downloads
 DEFAULT_TIMEOUT = 10          # Seconds for requests timeout
-BATCH_SIZE = 5                # Not used with COPY but kept for reference
+BATCH_SIZE = 5                # Insert in batches of 5 records
 
 # -----------------------------------------------------------------------------
 # Setup Modal Volume and Image
@@ -25,7 +25,6 @@ BATCH_SIZE = 5                # Not used with COPY but kept for reference
 model_volume = modal.Volume.from_name(MODEL_VOLUME_NAME)
 
 image = modal.Image.debian_slim().apt_install("libgl1", "libglib2.0-0").pip_install(
-    "torch",
     "insightface==0.7.3",
     "opencv-python-headless",
     "requests",
@@ -106,7 +105,7 @@ class FaceProcessor:
             if norm == 0:
                 print(f"Encountered zero-norm embedding in {photo_key}")
                 continue
-            # Keep the same data format as before.
+            # Normalize embedding and convert to list of floats.
             normalized_embedding = (embedding / norm).astype(np.float32).tolist()
             records.append((photo_key, normalized_embedding))
         return records
@@ -115,13 +114,12 @@ class FaceProcessor:
         """
         Optimized bulk insertion using PostgreSQL COPY.
         Converts records to a tab-separated format and uses copy_from.
-        The embedding list is converted to a string using the same format as your previous version.
+        The embedding list is converted to a string.
         """
         if not records:
             return
         buffer = io.StringIO()
         for photo_key, embedding in records:
-            # Use the same conversion as before: e.g. "[0.1,0.2,...]"
             embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
             buffer.write(f"{photo_key}\t{embedding_str}\n")
         buffer.seek(0)
@@ -136,7 +134,7 @@ class FaceProcessor:
         Processes a batch of images:
           - Downloads images concurrently.
           - Processes each image sequentially for face analysis.
-          - Stores embeddings in the PostgreSQL table 'faces' using the COPY command.
+          - Stores embeddings in the PostgreSQL table 'faces' using the COPY command in batches of 5.
         
         Payload format:
           {
@@ -181,11 +179,14 @@ class FaceProcessor:
         processing_end = time.time()
         print(f"Sequential face analysis completed in {processing_end - processing_start:.2f} seconds")
 
-        # Use COPY for bulk insertion of embeddings
+        # Insert embeddings in batches of BATCH_SIZE records using COPY
         insert_start = time.time()
         if insert_records:
-            self.copy_insert_embeddings(insert_records)
-            print(f"Bulk inserted {len(insert_records)} records using COPY.")
+            total_records = len(insert_records)
+            for i in range(0, total_records, BATCH_SIZE):
+                batch = insert_records[i:i+BATCH_SIZE]
+                self.copy_insert_embeddings(batch)
+                print(f"Bulk inserted batch of {len(batch)} records using COPY.")
         else:
             print("No records to insert")
         insert_end = time.time()
