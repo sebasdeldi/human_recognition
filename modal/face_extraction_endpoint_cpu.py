@@ -4,7 +4,7 @@ import numpy as np
 import time
 import modal
 from insightface.app import FaceAnalysis
-from fastapi import Request, HTTPException  # Import FastAPI components
+from fastapi import Request, HTTPException
 
 # -----------------------------------------------------------------------------
 # Configuration & Constants
@@ -22,12 +22,13 @@ image = modal.Image.debian_slim().apt_install("libgl1", "libglib2.0-0").pip_inst
     "opencv-python-headless",
     "numpy",
     "onnxruntime",
-    "fastapi"
+    "fastapi",
+    "python-multipart"
 )
 
 app = modal.App(
     image=image,
-    name="insightface-app",
+    name="FaceExtractionApi",
     secrets=[modal.Secret.from_name("face-extraction-secrets")]
 )
 
@@ -50,7 +51,7 @@ class FaceProcessorEndpoint:
               type: MULTIFACE, message: "Photos with only one face allowed"
           - If no face is detected, responds with HTTP 422:
               type: NOFACE, message: "No faces detected in the photo"
-          - Otherwise, returns a JSON with the norm of the embedding.
+          - Otherwise, returns a JSON with the normalized embedding vector.
         """
         # Validate AuthorizationToken header
         auth_token = request.headers.get("AuthorizationToken")
@@ -97,7 +98,7 @@ class FaceProcessorEndpoint:
                 detail={"type": "NOFACE", "message": "No faces detected in the photo"}
             )
         
-        # For the single detected face, compute the norm of its embedding
+        # For the single detected face, get and normalize its embedding
         face = faces[0]
         embedding = face.embedding
         if embedding is None:
@@ -106,6 +107,13 @@ class FaceProcessorEndpoint:
                 detail={"type": "NOEMBEDDING", "message": "No embedding found in the face"}
             )
         norm = np.linalg.norm(embedding)
+        if norm == 0:
+            raise HTTPException(
+                status_code=422,
+                detail={"type": "ZERO_NORM", "message": "Encountered zero-norm embedding"}
+            )
+        # Normalize embedding and explicitly convert each element to a native float
+        normalized_embedding = [float(x) for x in (embedding / norm).astype(np.float32).tolist()]
         
-        # Return the norm in a JSON response
-        return {"norm": norm}
+        # Return the normalized embedding vector in a JSON response
+        return {"embedding": normalized_embedding}

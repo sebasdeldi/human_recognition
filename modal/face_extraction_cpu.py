@@ -35,7 +35,7 @@ image = modal.Image.debian_slim().apt_install("libgl1", "libglib2.0-0").pip_inst
 
 app = modal.App(
     image=image,
-    name="insightface-app",
+    name="FaceExtraction",
     secrets=[modal.Secret.from_name("face-extraction-secrets")]
 )
 
