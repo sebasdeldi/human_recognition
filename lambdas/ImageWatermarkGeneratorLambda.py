@@ -5,6 +5,7 @@ import json
 import time
 from PIL import Image, ImageEnhance
 
+# Initialize S3 client
 s3 = boto3.client("s3")
 
 # Destination bucket for watermarked images
@@ -18,7 +19,13 @@ WATERMARK_S3_KEY = "utils/watermark.png"
 WATERMARK_IMAGE = None
 
 def load_watermark():
-    """Loads the watermark into memory (only once per cold start)."""
+    """
+    Loads the watermark image from S3 into memory.
+    This function ensures the watermark is only loaded once per cold start.
+    
+    Returns:
+        Image: A PIL Image object of the watermark with reduced opacity.
+    """
     global WATERMARK_IMAGE
     if WATERMARK_IMAGE is None:
         print("🔹 Loading watermark from S3 (cold start)...")
@@ -32,14 +39,17 @@ def load_watermark():
     return WATERMARK_IMAGE
 
 def apply_watermark(image):
-    """Applies the watermark at the center of the image efficiently."""
+    """
+    Applies a centered watermark to the given image.
+    
+    Args:
+        image (PIL.Image): The input image to be watermarked.
+    
+    Returns:
+        PIL.Image: The watermarked image.
+    """
     image = image.convert("RGBA")
     watermark = load_watermark()
-
-    # Resize watermark once per batch (instead of per image)
-    # max_width = int(image.width * 0.3)
-    # max_height = int(image.height * 0.3)
-    # watermark = watermark.resize((max_width, max_height), Image.LANCZOS)
 
     # Center the watermark
     x = (image.width - watermark.width) // 2
@@ -51,14 +61,32 @@ def apply_watermark(image):
     return Image.alpha_composite(image, overlay).convert("RGB")
 
 def upload_to_s3(bucket, key, image):
-    """Uploads the image to S3 directly from a stream."""
+    """
+    Uploads an image to an S3 bucket.
+    
+    Args:
+        bucket (str): The name of the S3 bucket.
+        key (str): The S3 object key (file path in S3).
+        image (PIL.Image): The image to be uploaded.
+    """
     with io.BytesIO() as output_buffer:
         image.save(output_buffer, format="JPEG", quality=30)
         output_data = output_buffer.getvalue()
         s3.put_object(Bucket=bucket, Key=key, Body=output_data, ContentType="image/jpeg")
 
 def lambda_handler(event, context):
-    """Processes images, applies watermark, and uploads them back to S3."""
+    """
+    AWS Lambda handler function to process images, apply watermark, and upload them back to S3.
+    
+    Args:
+        event (dict): The event data passed to the function, containing:
+            - bucket (str): The source S3 bucket name.
+            - keys (list): List of S3 object keys to process.
+        context (LambdaContext): AWS Lambda runtime information.
+    
+    Returns:
+        dict: A response indicating success or failure.
+    """
     bucket = event.get("bucket")
     keys = event.get("keys", [])
 

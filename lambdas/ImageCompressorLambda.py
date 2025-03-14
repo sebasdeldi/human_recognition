@@ -4,12 +4,13 @@ import boto3
 import json
 import time
 import urllib.parse
-from PIL import Image
+from PIL import Image, features
 
-from PIL import features
+# Print PIL version and check if libjpeg_turbo is enabled
 print(Image.__version__)
 print(features.check("libjpeg_turbo"))
 
+# Initialize S3 client
 s3 = boto3.client("s3")
 
 # Load destination bucket from environment variable
@@ -17,11 +18,30 @@ DEST_BUCKET_LOW_QUALITY = os.getenv("DEST_BUCKET_LOW_QUALITY")
 if not DEST_BUCKET_LOW_QUALITY:
     raise RuntimeError("❌ DEST_BUCKET_LOW_QUALITY environment variable is not set.")
 
-def upload_to_s3(bucket, key, data, content_type):
-    """Uploads the image to S3."""
+def upload_to_s3(bucket: str, key: str, data: bytes, content_type: str):
+    """
+    Uploads an image to an S3 bucket.
+
+    Args:
+        bucket (str): The name of the S3 bucket.
+        key (str): The object key for the file in the bucket.
+        data (bytes): The image data to upload.
+        content_type (str): The MIME type of the image.
+    """
     s3.put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)
 
 def lambda_handler(event, context):
+    """
+    AWS Lambda function to process images from S3, generate low-quality versions,
+    and upload them to another S3 bucket.
+
+    Args:
+        event (dict): The event data containing S3 event records.
+        context (LambdaContext): The runtime context of the Lambda function.
+
+    Returns:
+        dict: Response indicating success or failure.
+    """
     records = event.get("Records", [])
     print(f"Received {len(records)} messages.")
 
@@ -34,7 +54,7 @@ def lambda_handler(event, context):
         try:
             start_time = time.time()
 
-            # Download image directly from S3 without an intermediate buffer
+            # Download image from S3
             s3_response = s3.get_object(Bucket=s3_bucket, Key=s3_key)
             image_data = s3_response["Body"].read()
             content_type = s3_response.get("ContentType", "image/jpeg")
@@ -53,7 +73,7 @@ def lambda_handler(event, context):
             low_res_time = time.time() - low_res_start
             print(f"⏳ Low-res generation took {low_res_time:.2f}s")
 
-            # Upload image
+            # Upload the low-quality image to S3
             upload_start = time.time()
             upload_to_s3(DEST_BUCKET_LOW_QUALITY, s3_key, low_res_data, content_type)
             upload_time = time.time() - upload_start
