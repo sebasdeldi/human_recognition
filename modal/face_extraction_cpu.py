@@ -6,6 +6,7 @@ import psycopg2
 import time
 import modal
 import io  # For StringIO
+from datetime import datetime
 from insightface.app import FaceAnalysis
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -114,19 +115,27 @@ class FaceProcessor:
         """
         Optimized bulk insertion using PostgreSQL COPY.
         Converts records to a tab-separated format and uses copy_from.
-        The embedding list is converted to a string.
+        Adds `created_at` and `updated_at` timestamps.
         """
         if not records:
             return
+        
         buffer = io.StringIO()
+        now = datetime.utcnow().isoformat()  # Get current timestamp in UTC format
+        
         for photo_key, embedding in records:
             embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
-            buffer.write(f"{photo_key}\t{embedding_str}\n")
+            buffer.write(f"{photo_key}\t{embedding_str}\t{now}\t{now}\n")  # Append timestamps
+
         buffer.seek(0)
         cursor = self.db_conn.cursor()
-        cursor.copy_from(buffer, 'faces', sep='\t', columns=('photo_key', 'embedding'))
+        cursor.copy_from(
+            buffer, 'faces', sep='\t',
+            columns=('photo_key', 'embedding', 'created_at', 'updated_at')
+        )
         self.db_conn.commit()
         cursor.close()
+
 
     @modal.method()
     def analyze_and_store_embeddings(self, payload):
