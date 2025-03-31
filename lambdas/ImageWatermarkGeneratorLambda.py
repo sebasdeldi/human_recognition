@@ -30,11 +30,11 @@ def load_watermark():
     if WATERMARK_IMAGE is None:
         print("🔹 Loading watermark from S3 (cold start)...")
         watermark_obj = s3.get_object(Bucket=WATERMARK_S3_BUCKET, Key=WATERMARK_S3_KEY)
-        watermark_image = Image.open(io.BytesIO(watermark_obj["Body"].read())).convert("RGBA")
+        WATERMARK_IMAGE = Image.open(io.BytesIO(watermark_obj["Body"].read())).convert("RGBA")
 
         # Optimize watermark by reducing opacity
-        enhancer = ImageEnhance.Brightness(watermark_image)
-        WATERMARK_IMAGE = enhancer.enhance(0.7)  # Reduce opacity to 70%
+        # enhancer = ImageEnhance.Brightness(watermark_image)
+        # WATERMARK_IMAGE = enhancer.enhance(0.7)  # Reduce opacity to 70%
 
     return WATERMARK_IMAGE
 
@@ -48,17 +48,23 @@ def apply_watermark(image):
     Returns:
         PIL.Image: The watermarked image.
     """
-    image = image.convert("RGBA")
+    # Convert to RGB if it's not already (to ensure consistency)
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+    
     watermark = load_watermark()
-
+    
     # Center the watermark
     x = (image.width - watermark.width) // 2
     y = (image.height - watermark.height) // 2
-
-    # Blend watermark with image
-    overlay = Image.new("RGBA", image.size, (255, 255, 255, 0))
-    overlay.paste(watermark, (x, y), watermark)
-    return Image.alpha_composite(image, overlay).convert("RGB")
+    
+    # Create a copy of the image (to avoid modifying the original)
+    result = image.copy()
+    
+    # Paste watermark with mask
+    result.paste(watermark, (x, y), watermark)
+    
+    return result
 
 def upload_to_s3(bucket, key, image):
     """
